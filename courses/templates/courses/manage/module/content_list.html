@@ -58,3 +58,49 @@
         </div>
     {% endwith %}
 {% endblock %}
+
+{% block domready %}
+    // Make the modules sortable
+    $('#modules').sortable({
+        stop: function(event, ui) {
+            var modules_order = {};
+            // Update the order of the modules
+            $('#modules').children().each(function() {
+                // Update the order field visually
+                $(this).find('.order').text($(this).index() + 1);
+                // Associate the module's id with its new order
+                modules_order[$(this).data('id')] = $(this).index();
+            });
+
+            // Send the updated order to the server via an AJAX request
+            $.ajax({
+                type: 'POST',
+                url: '{% url "module_order" %}',
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                data: JSON.stringify(modules_order)
+            });
+        }
+    });
+
+    // Make the module contents sortable
+    $('#module-contents').sortable({
+        stop: function(event, ui) {
+            var contents_order = {};
+            // Update the order of the contents
+            $('#module-contents').children().each(function() {
+                // Associate the content's id with its new order
+                contents_order[$(this).data('id')] = $(this).index();
+            });
+
+            // Send the updated order to the server via an AJAX request
+            $.ajax({
+                type: 'POST',
+                url: '{% url "content_order" %}',
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                data: JSON.stringify(contents_order)
+            });
+        }
+    });
+{% endblock %}
