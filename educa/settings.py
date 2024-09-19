@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'students.apps.StudentsConfig',
 ]
 
 MIDDLEWARE = [
@@ -121,4 +122,5 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.0/howto/static-files/
 # settings.py
 
-
+from django.urls import reverse_lazy
+LOGIN_REDIRECT_URL = reverse_lazy('student_course_list')
