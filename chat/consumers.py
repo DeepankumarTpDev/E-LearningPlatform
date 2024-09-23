@@ -1,9 +1,12 @@
 import json
 from channels.generic.websocket import WebsocketConsumer
 from channels.generic.websocket import AsyncWebsocketConsumer
-from asgiref.sync import async_to_sync
+from asgiref.sync import async_to_sync, sync_to_async
+from channels.db import database_sync_to_async
 from django.utils import timezone
-
+from .models import ChatMessage
+from courses.models import Course
+from django.shortcuts import render, get_object_or_404
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -17,6 +20,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.channel_name
         )
         await self.accept()
+
+        # load previous messages
+        previous_messages = await self.get_previous_messages()
+
+        for message in previous_messages:
+            await self.send(text_data=json.dumps(message))
 
     async def disconnect(self, close_code):
         # leave room group
@@ -33,6 +42,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # # send message to WebSocket
         # self.send(text_data=json.dumps({'message': message}))
         # send message to room group
+        await self.save_message(message, now)
+
         await self.channel_layer.group_send(
             self.room_group_name,
             {
@@ -44,7 +55,32 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }
         )
 
+
     # receive message from room group
     async def chat_message(self, event):
         # send message to WebSocket
         await self.send(text_data=json.dumps(event))
+
+    @sync_to_async
+    def save_message(self, message, timestamp):
+        course = Course.objects.get(id=self.id)
+        ChatMessage.objects.create(
+            sender= self.user,
+            content= message,
+            course = course,
+            timestamp=timestamp
+        )
+
+
+    @sync_to_async
+    def get_previous_messages(self):
+        messages = ChatMessage.objects.filter(course=self.id).order_by('-timestamp')[:50][::-1]
+        return [{'message':msg.content,'user':msg.sender.username, 'datetime':msg.timestamp.isoformat()} for msg in messages]
+    
+    
+    async def message_to_json(message):
+        return {
+        'message': message.content,  # Accessing the 'message' attribute
+        'user': message.sender.username,  # Accessing sender's username
+        'datetime': message.timestamp.isoformat(),  # Accessing created_at attribute
+    }
