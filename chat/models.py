@@ -7,6 +7,7 @@ class ChatMessage(models.Model):
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=False)
     course = models.ForeignKey(Course, related_name='messages', on_delete=models.CASCADE)
+    isdeleted = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['timestamp']

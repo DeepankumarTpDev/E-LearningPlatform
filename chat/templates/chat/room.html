@@ -15,22 +15,34 @@
 {% block domready %}
     var url = 'ws://' + window.location.host + '/ws/chat/room/' + '{{ course.id }}/';
     var chatSocket = new WebSocket(url);
-
+    var $chat = $('#chat');
     // Handle incoming WebSocket messages
     chatSocket.onmessage = function(e) {
         var data = JSON.parse(e.data);
-        var message = data.message;
-
-        var dateOptions = {hour: 'numeric', minute: 'numeric', hour12: true};
-        var datetime = new Date(data['datetime']).toLocaleString('en', dateOptions);
         
-        var isMe = data.user === '{{ request.user }}';
-        var source = isMe ? 'me' : 'other';
-        var name = isMe ? 'Me' : data.user;
-        
-        var $chat = $('#chat');
-        $chat.append('<div class="message ' + source + '">' + '<strong>' + name + '</strong> ' +
-        '<span class="date">' + datetime + '</span><br>' +  message + '</div>');
+        // Check if the action is to delete a message
+        if (data.action === 'delete_message') {
+            const messageId = data.message_id;
+            // Use jQuery to remove the message div
+            $('#message-' + messageId).remove();
+        } else {
+            // Handle other actions like receiving or displaying new messages
+            var message = data.message;
+            var message_id = data.message_id;
+            var dateOptions = {hour: 'numeric', minute: 'numeric', hour12: true};
+            var datetime = new Date(data['datetime']).toLocaleString('en', dateOptions);
+            
+            var isMe = data.user === '{{ request.user }}';
+            var source = isMe ? 'me' : 'other';
+            var name = isMe ? 'Me' : data.user;
+            
+            $chat.append('<div class="message ' + source + '" id="message-' + message_id + '">' +
+                '<strong>' + name + '</strong> ' +
+                '<span class="date">' + datetime + '</span><br>' + 
+                message + 
+                '<button class="delete-btn" data-message-id="' + message_id + '">Delete</button>' + 
+                '</div>');
+        }
 
         // Scroll the chat to the bottom
         $chat.scrollTop($chat[0].scrollHeight);
@@ -49,13 +61,25 @@
         var message = $input.val();
         if (message) {
             // Send the message in JSON format via WebSocket
-            chatSocket.send(JSON.stringify({ 'message': message }));
+            chatSocket.send(JSON.stringify({ action: 'send_message',message: message }));
 
             // Clear the input field and return focus
             $input.val('');
             $input.focus();
         }
     });
+
+
+    // Event listener for delete button
+    $chat.on('click', '.delete-btn', function() {
+        var messageId = $(this).data('message-id');
+        
+        // Send delete request to WebSocket
+        chatSocket.send(JSON.stringify({
+            action: 'delete_message',
+            message_id: messageId
+        }));
+    }); 
 
     // Set focus on the input field
     $input.focus();

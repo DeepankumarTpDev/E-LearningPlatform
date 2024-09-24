@@ -37,23 +37,38 @@ class ChatConsumer(AsyncWebsocketConsumer):
     # receive message from WebSocket
     async def receive(self, text_data):
         text_data_json = json.loads(text_data)
-        message = text_data_json['message']
-        now = timezone.now()
         # # send message to WebSocket
         # self.send(text_data=json.dumps({'message': message}))
         # send message to room group
-        await self.save_message(message, now)
+        action = text_data_json.get('action')
 
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'chat_message',
-                'message': message,
-                'user': self.user.username, 
-                'datetime': now.isoformat(),
 
-            }
-        )
+        # Handle sending a new message
+        if action == 'send_message':
+            message = text_data_json['message']
+            now = timezone.now()
+            message_id = await self.save_message(message, now)
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_message',
+                    'message': message,
+                    'message_id': message_id,
+                    'user': self.user.username, 
+                    'datetime': now.isoformat(),
+
+                }
+            )
+        elif action == 'delete_message':
+            message_id = text_data_json['message_id']
+            await self.delete_message(message_id)
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'message_deleted',
+                    'message_id': message_id
+                }
+            )
 
 
     # receive message from room group
@@ -61,26 +76,32 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # send message to WebSocket
         await self.send(text_data=json.dumps(event))
 
+    async def message_deleted(self, event):
+        await self.send(text_data=json.dumps({
+            'action': 'delete_message',
+            'message_id': event['message_id'],
+        }))
+
     @sync_to_async
     def save_message(self, message, timestamp):
         course = Course.objects.get(id=self.id)
-        ChatMessage.objects.create(
+        message=ChatMessage.objects.create(
             sender= self.user,
             content= message,
             course = course,
             timestamp=timestamp
         )
+        return message.id
 
+    @sync_to_async
+    def delete_message(self, message_id):
+        message = ChatMessage.objects.get(id=message_id)
+        message.isdeleted = True
+        message.save()
 
     @sync_to_async
     def get_previous_messages(self):
-        messages = ChatMessage.objects.filter(course=self.id).order_by('-timestamp')[:50][::-1]
-        return [{'message':msg.content,'user':msg.sender.username, 'datetime':msg.timestamp.isoformat()} for msg in messages]
+        messages = ChatMessage.objects.filter(course=self.id, isdeleted=False).order_by('-timestamp')[:50][::-1]
+        return [{'message_id':msg.id, 'message':msg.content,'user':msg.sender.username, 'datetime':msg.timestamp.isoformat(), 'isdeleted':msg.isdeleted} for msg in messages]
     
     
-    async def message_to_json(message):
-        return {
-        'message': message.content,  # Accessing the 'message' attribute
-        'user': message.sender.username,  # Accessing sender's username
-        'datetime': message.timestamp.isoformat(),  # Accessing created_at attribute
-    }
